@@ -8,11 +8,13 @@ use DennisCuijpers\SignedToken\SignedToken;
 use Illuminate\Support\Facades\Facade;
 
 /**
- * @method static string make($data, ?int $ttl = null)
- * @method static string sign(string $data, int $length = null)
- * @method static string random(int $length = null)
- * @method static get(string $token, $default = null)
- * @method static int|null ttl(string $token)
+ * @method static string encode(string $data, ?int $ttl = null)
+ * @method static string decode(string $token): string
+ * @method static string sign(string $data, ?int $ttl = null)
+ * @method static bool verify(string $token, string $data)
+ * @method static string uuid()
+ * @method static string hex(int $length = 32)
+ * @method static string random(int $length = 32)
  *
  * @see SignedToken
  */

@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace DennisCuijpers\SignedToken;
 
+use Carbon\Carbon;
+use DennisCuijpers\SignedToken\Exceptions\TokenExpiredException;
+use DennisCuijpers\SignedToken\Exceptions\TokenInvalidException;
+
 class SignedToken
 {
     private const ALPHABET  = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -14,104 +18,127 @@ class SignedToken
     {
     }
 
-    public function make($data, ?int $ttl = null): string
+    public function encode(string $data, int $ttl = 0): string
     {
-        $payload = $this->encode($this->serialize([
+        return $this->encodeRaw($this->baseEncode($data), $ttl);
+    }
+
+    public function decode(string $token): string
+    {
+        return $this->baseDecode($this->decodeRaw($token));
+    }
+
+    public function sign(string $data, ?int $ttl = null): string
+    {
+        return $this->encodeRaw($this->signature($data), $ttl);
+    }
+
+    public function verify(string $token, string $data): bool
+    {
+        return hash_equals($this->signature($data), $this->decodeRaw($token));
+    }
+
+    public function uuid(): string
+    {
+        $data = random_bytes(16);
+
+        $data[6] = chr(ord($data[6]) & 0x0F | 0x40); // set version to 0100
+        $data[8] = chr(ord($data[8]) & 0x3F | 0x80); // set bits 6-7 to 10
+
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
+    }
+
+    public function hex(int $length = 32): string
+    {
+        $random = random_bytes((int) ceil($length / 2));
+
+        return substr(bin2hex($random), 0, $length);
+    }
+
+    public function random(int $length = 32): string
+    {
+        $random = random_bytes($length);
+
+        return substr($this->baseEncode($random), 0, $length);
+    }
+
+    private function encodeRaw(string $data, int $ttl = 0): string
+    {
+        $payload = implode(static::SEPARATOR, [
             $data,
-            $ttl !== null ? $this->now() + $ttl : null,
-        ]));
+            $this->baseEncodeInt($this->now()),
+            $this->baseEncodeInt($ttl)
+        ]);
 
-        return $payload . static::SEPARATOR . $this->sign($payload);
+        return $payload . static::SEPARATOR . $this->signature($payload);
     }
 
-    public function sign(string $data, int $length = null): string
+    private function decodeRaw(string $token): string
     {
-        $hash = hash_hmac($this->config['algo'], $data, $this->config['key'], true);
-
-        return substr($this->encode($hash), 0, $length ?? $this->config['length']);
-    }
-
-    public function random(int $length = null): string
-    {
-        $random = random_bytes($length ?? $this->config['length']);
-
-        return substr($this->encode($random), 0, $length ?? $this->config['length']);
-    }
-
-    public function get(string $token, $default = null)
-    {
-        if (!$parsed = $this->parse($token)) {
-            return $default;
+        if (substr_count($token, static::SEPARATOR) !== 3) {
+            throw new TokenInvalidException('Invalid token content');
         }
 
-        [$data, $expires] = $parsed;
+        [$data, $timestamp, $ttl, $signature] = explode(static::SEPARATOR, $token);
 
-        if ($expires !== null && $expires < $this->now()) {
-            return null;
+        $payload = implode(static::SEPARATOR, [$data, $timestamp, $ttl]);
+
+        if ($this->signature($payload) !== $signature) {
+            throw new TokenInvalidException('Invalid token signature');
+        }
+
+        $timestamp = $this->baseDecodeInt($timestamp);
+        $ttl       = $this->baseDecodeInt($ttl);
+
+        if ($ttl !== 0 && $timestamp + $ttl < $this->now()) {
+            throw new TokenExpiredException('Expired token');
         }
 
         return $data;
     }
 
-    public function ttl(string $token): ?int
+    private function signature(string $data): string
     {
-        if (!$parsed = $this->parse($token)) {
-            return null;
-        }
+        $hash = hash_hmac($this->config['algo'], $data, $this->config['key'], true);
 
-        [$data, $expires] = $parsed;
-
-        if ($expires === null) {
-            return null;
-        }
-
-        return $expires - $this->now();
+        return substr($this->baseEncode($hash), 0, $length ?? $this->config['length']);
     }
 
-    private function parse(string $token): ?array
-    {
-        if (substr_count($token, static::SEPARATOR) !== 1) {
-            return null;
-        }
-
-        [$payload, $signature] = explode(static::SEPARATOR, $token);
-
-        if ($this->sign($payload) !== $signature) {
-            return null;
-        }
-
-        return $this->unserialize($this->decode($payload));
-    }
-
-    private function serialize(array $data): string
-    {
-        return substr(json_encode($data, JSON_UNESCAPED_SLASHES), 1, -1);
-    }
-
-    private function unserialize(string $encoded): array
-    {
-        return json_decode("[{$encoded}]", true);
-    }
-
-    private function encode(string $data): string
+    private function baseEncode(string $data): string
     {
         $data = array_map(fn ($char) => ord($char), str_split($data));
 
-        $data = $this->convert($data, 256, static::TO_BASE);
+        $data = $this->baseConvert($data, 256, static::TO_BASE);
 
         return implode('', array_map(fn ($index) => static::ALPHABET[$index], $data));
     }
 
-    private function decode(string $data): string
+    private function baseEncodeInt(int $data): string
+    {
+        $data = $this->baseConvert([$data], 256, static::TO_BASE);
+
+        return implode('', array_map(fn ($index) => static::ALPHABET[$index], $data));
+    }
+
+    private function baseDecode(string $data): string
     {
         $data = array_map(fn ($char) => strpos(static::ALPHABET, $char), str_split($data));
 
-        $data = $this->convert($data, static::TO_BASE, 256);
+        $data = $this->baseConvert($data, static::TO_BASE, 256);
 
         return implode('', array_map(fn ($char) => chr($char), $data));
     }
 
-    private function convert(array $data, int $from, int $to): array
+    private function baseDecodeInt(string $data): int
+    {
+        $data = array_map(fn ($char) => strpos(static::ALPHABET, $char), str_split($data));
+
+        $data = $this->baseConvert($data, static::TO_BASE, 10);
+
+        return (int) implode('', $data);
+    }
+
+    private function baseConvert(array $data, int $from, int $to): array
     {
         $result = [];
         while ($count = count($data)) {
@@ -134,6 +161,6 @@ class SignedToken
 
     private function now(): int
     {
-        return time();
+        return Carbon::now()->unix();
     }
 }
