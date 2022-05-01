@@ -13,8 +13,11 @@ use Illuminate\Support\Facades\Facade;
  * @method static string sign(string $data, ?int $ttl = null)
  * @method static bool verify(string $token, string $data)
  * @method static string uuid()
+ * @method static bool isUuid(string $uuid)
  * @method static string hex(int $length = 32)
+ * @method static bool isHex(string $hex, int $length = 32)
  * @method static string random(int $length = 32)
+ * @method static bool isRandom(string $random, int $length = 32)
  *
  * @see SignedToken
  */

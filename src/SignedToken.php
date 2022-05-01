@@ -48,11 +48,21 @@ class SignedToken
         return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
     }
 
+    public function isUuid(string $uuid): bool
+    {
+        return preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/', $uuid) > 0;
+    }
+
     public function hex(int $length = 32): string
     {
         $random = random_bytes((int) ceil($length / 2));
 
         return substr(bin2hex($random), 0, $length);
+    }
+
+    public function isHex(string $hex, int $length = 32): bool
+    {
+        return preg_match('/^[0-9a-f]{' . $length . '}$/', $hex) > 0;
     }
 
     public function random(int $length = 32): string
@@ -62,12 +72,17 @@ class SignedToken
         return substr($this->baseEncode($random), 0, $length);
     }
 
+    public function isRandom(string $random, int $length = 32): bool
+    {
+        return preg_match('/^[0-9a-zA-Z]{' . $length . '}$/', $random) > 0;
+    }
+
     private function encodeRaw(string $data, int $ttl = 0): string
     {
         $payload = implode(static::SEPARATOR, [
             $data,
             $this->baseEncodeInt($this->now()),
-            $this->baseEncodeInt($ttl)
+            $this->baseEncodeInt($ttl),
         ]);
 
         return $payload . static::SEPARATOR . $this->signature($payload);
