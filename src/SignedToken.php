@@ -53,6 +53,22 @@ class SignedToken
         return preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/', $uuid) > 0;
     }
 
+    public function number(int $length = 9): string
+    {
+        $number = mt_rand(1, 9);
+
+        for ($i = 1; $i < $length; $i++) {
+            $number .= mt_rand(0, 9);
+        }
+
+        return $number;
+    }
+
+    public function isNumber(string $number, int $length = 9): bool
+    {
+        return preg_match('/^[0-9]{' . $length . '}$/', $number) > 0;
+    }
+
     public function hex(int $length = 32): string
     {
         $random = random_bytes((int) ceil($length / 2));
