@@ -7,6 +7,7 @@ namespace DennisCuijpers\SignedToken;
 use Carbon\Carbon;
 use DennisCuijpers\SignedToken\Exceptions\TokenExpiredException;
 use DennisCuijpers\SignedToken\Exceptions\TokenInvalidException;
+use DennisCuijpers\SignedToken\Exceptions\TokenMismatchException;
 
 class SignedToken
 {
@@ -16,6 +17,28 @@ class SignedToken
 
     public function __construct(private array $config)
     {
+    }
+
+    public function pack(string $type, array $data, int $ttl = 0): string
+    {
+        $payload = json_encode([$type, $data], JSON_UNESCAPED_SLASHES);
+
+        return $this->encode($payload, $ttl);
+    }
+
+    public function unpack(string $type, string $token): array
+    {
+        $payload = json_decode($this->decode($token), true);
+
+        if (!is_array($payload) || count($payload) !== 2 || !is_string($payload[0]) || !is_array($payload[1])) {
+            throw new TokenInvalidException('Invalid payload');
+        }
+
+        if ($payload[0] !== $type) {
+            throw new TokenMismatchException('Invalid type');
+        }
+
+        return $payload[1];
     }
 
     public function encode(string $data, int $ttl = 0): string
